@@ -1,5 +1,5 @@
 # Copyright (c) 2022 Kyle Schouviller (https://github.com/kyle0654)
-
+from pathlib import Path
 from logging import Logger
 
 from invokeai.backend.util.logging import InvokeAILogger
@@ -64,6 +64,8 @@ class ApiDependencies:
         logger.debug(f"Internet connectivity is {config.internet_available}")
 
         output_folder = config.output_path
+        images_path = f"{output_folder}/images"
+        latents_path = f"{output_folder}/latents"
 
         db = SqliteDatabase(config, logger)
 
@@ -77,11 +79,11 @@ class ApiDependencies:
         events = FastAPIEventService(event_handler_id)
         graph_execution_manager = SqliteItemStorage[GraphExecutionState](db=db, table_name="graph_executions")
         graph_library = SqliteItemStorage[LibraryGraph](db=db, table_name="graphs")
-        image_files = DiskImageFileStorage(f"{output_folder}/images")
+        image_files = DiskImageFileStorage(images_path)
         image_records = SqliteImageRecordStorage(db=db)
         images = ImageService()
         invocation_cache = MemoryInvocationCache(max_cache_size=config.node_cache_size)
-        latents = ForwardCacheLatentsStorage(DiskLatentsStorage(f"{output_folder}/latents"))
+        latents = ForwardCacheLatentsStorage(DiskLatentsStorage(latents_path))
         model_manager = ModelManagerService(config, logger)
         names = SimpleNameService()
         performance_statistics = InvocationStatsService()
@@ -121,6 +123,14 @@ class ApiDependencies:
         ApiDependencies.invoker = Invoker(services)
 
         db.clean()
+
+        # clean up latents - this is a temporary measure to respect users' disk space
+        deleted_latents_count = 0
+        for latents in Path(latents_path).glob("*"):
+            if latents.is_file():
+                latents.unlink()
+                deleted_latents_count += 1
+        logger.info(f"Deleted {deleted_latents_count} latents files")
 
     @staticmethod
     def shutdown():
