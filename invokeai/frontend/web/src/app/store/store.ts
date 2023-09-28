@@ -22,6 +22,7 @@ import systemReducer from 'features/system/store/systemSlice';
 import modelmanagerReducer from 'features/ui/components/tabs/ModelManager/store/modelManagerSlice';
 import hotkeysReducer from 'features/ui/store/hotkeysSlice';
 import uiReducer from 'features/ui/store/uiSlice';
+import dynamicMiddlewares from 'redux-dynamic-middlewares';
 import { rememberEnhancer, rememberReducer } from 'redux-remember';
 import { api } from 'services/api';
 import { LOCALSTORAGE_PREFIX } from './constants';
@@ -93,6 +94,7 @@ export const store = configureStore({
       immutableCheck: false,
     })
       .concat(api.middleware)
+      .concat(dynamicMiddlewares)
       .prepend(listenerMiddleware.middleware),
   devTools: {
     actionSanitizer,
