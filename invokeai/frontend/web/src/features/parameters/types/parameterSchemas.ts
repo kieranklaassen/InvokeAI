@@ -210,6 +210,15 @@ export type HeightParam = z.infer<typeof zHeight>;
 export const isValidHeight = (val: unknown): val is HeightParam =>
   zHeight.safeParse(val).success;
 
+/**
+ * Zod schema for resolution parameter
+ */
+export const zResolution = z.tuple([zWidth, zHeight]);
+/**
+ * Type alias for resolution parameter, inferred from its zod schema
+ */
+export type ResolutionParam = z.infer<typeof zResolution>;
+
 export const zBaseModel = z.enum([
   'any',
   'sd-1',
@@ -347,6 +356,10 @@ export const zT2IAdapterModel = z.object({
   model_name: z.string().min(1),
   base_model: zBaseModel,
 });
+export const isValidT2IAdapterModel = (
+  val: unknown
+): val is T2IAdapterModelParam => zT2IAdapterModel.safeParse(val).success;
+
 /**
  * Type alias for model parameter, inferred from its zod schema
  */

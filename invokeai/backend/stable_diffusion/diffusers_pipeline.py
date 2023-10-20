@@ -24,6 +24,7 @@ from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 
 from invokeai.app.services.config import InvokeAIAppConfig
 from invokeai.backend.ip_adapter.ip_adapter import IPAdapter
+from invokeai.backend.ip_adapter.unet_patcher import UNetPatcher
 from invokeai.backend.stable_diffusion.diffusion.conditioning_data import ConditioningData
 
 from ..util import auto_detect_slice_size, normalize_device
@@ -336,7 +337,7 @@ class StableDiffusionGeneratorPipeline(StableDiffusionPipeline):
         additional_guidance: List[Callable] = None,
         callback: Callable[[PipelineIntermediateState], None] = None,
         control_data: List[ControlNetData] = None,
-        ip_adapter_data: Optional[IPAdapterData] = None,
+        ip_adapter_data: Optional[list[IPAdapterData]] = None,
         t2i_adapter_data: Optional[list[T2IAdapterData]] = None,
         mask: Optional[torch.Tensor] = None,
         masked_latents: Optional[torch.Tensor] = None,
@@ -410,7 +411,7 @@ class StableDiffusionGeneratorPipeline(StableDiffusionPipeline):
         *,
         additional_guidance: List[Callable] = None,
         control_data: List[ControlNetData] = None,
-        ip_adapter_data: Optional[IPAdapterData] = None,
+        ip_adapter_data: Optional[list[IPAdapterData]] = None,
         t2i_adapter_data: Optional[list[T2IAdapterData]] = None,
         callback: Callable[[PipelineIntermediateState], None] = None,
     ):
@@ -424,6 +425,7 @@ class StableDiffusionGeneratorPipeline(StableDiffusionPipeline):
         if timesteps.shape[0] == 0:
             return latents, attention_map_saver
 
+        ip_adapter_unet_patcher = None
         if conditioning_data.extra is not None and conditioning_data.extra.wants_cross_attention_control:
             attn_ctx = self.invokeai_diffuser.custom_attention_context(
                 self.invokeai_diffuser.model,
@@ -434,11 +436,8 @@ class StableDiffusionGeneratorPipeline(StableDiffusionPipeline):
         elif ip_adapter_data is not None:
             # TODO(ryand): Should we raise an exception if both custom attention and IP-Adapter attention are active?
             # As it is now, the IP-Adapter will silently be skipped.
-            weight = ip_adapter_data.weight[0] if isinstance(ip_adapter_data.weight, List) else ip_adapter_data.weight
-            attn_ctx = ip_adapter_data.ip_adapter_model.apply_ip_adapter_attention(
-                unet=self.invokeai_diffuser.model,
-                scale=weight,
-            )
+            ip_adapter_unet_patcher = UNetPatcher([ipa.ip_adapter_model for ipa in ip_adapter_data])
+            attn_ctx = ip_adapter_unet_patcher.apply_ip_adapter_attention(self.invokeai_diffuser.model)
             self.use_ip_adapter = True
         else:
             attn_ctx = nullcontext()
@@ -468,6 +467,7 @@ class StableDiffusionGeneratorPipeline(StableDiffusionPipeline):
                     control_data=control_data,
                     ip_adapter_data=ip_adapter_data,
                     t2i_adapter_data=t2i_adapter_data,
+                    ip_adapter_unet_patcher=ip_adapter_unet_patcher,
                 )
                 latents = step_output.prev_sample
 
@@ -513,8 +513,9 @@ class StableDiffusionGeneratorPipeline(StableDiffusionPipeline):
         total_step_count: int,
         additional_guidance: List[Callable] = None,
         control_data: List[ControlNetData] = None,
-        ip_adapter_data: Optional[IPAdapterData] = None,
+        ip_adapter_data: Optional[list[IPAdapterData]] = None,
         t2i_adapter_data: Optional[list[T2IAdapterData]] = None,
+        ip_adapter_unet_patcher: Optional[UNetPatcher] = None,
     ):
         # invokeai_diffuser has batched timesteps, but diffusers schedulers expect a single value
         timestep = t[0]
@@ -527,20 +528,20 @@ class StableDiffusionGeneratorPipeline(StableDiffusionPipeline):
 
         # handle IP-Adapter
         if self.use_ip_adapter and ip_adapter_data is not None:  # somewhat redundant but logic is clearer
-            first_adapter_step = math.floor(ip_adapter_data.begin_step_percent * total_step_count)
-            last_adapter_step = math.ceil(ip_adapter_data.end_step_percent * total_step_count)
-            weight = (
-                ip_adapter_data.weight[step_index]
-                if isinstance(ip_adapter_data.weight, List)
-                else ip_adapter_data.weight
-            )
-            if step_index >= first_adapter_step and step_index <= last_adapter_step:
-                # only apply IP-Adapter if current step is within the IP-Adapter's begin/end step range
-                # ip_adapter_data.ip_adapter_model.set_scale(ip_adapter_data.weight)
-                ip_adapter_data.ip_adapter_model.set_scale(weight)
-            else:
-                # otherwise, set IP-Adapter scale to 0, so it has no effect
-                ip_adapter_data.ip_adapter_model.set_scale(0.0)
+            for i, single_ip_adapter_data in enumerate(ip_adapter_data):
+                first_adapter_step = math.floor(single_ip_adapter_data.begin_step_percent * total_step_count)
+                last_adapter_step = math.ceil(single_ip_adapter_data.end_step_percent * total_step_count)
+                weight = (
+                    single_ip_adapter_data.weight[step_index]
+                    if isinstance(single_ip_adapter_data.weight, List)
+                    else single_ip_adapter_data.weight
+                )
+                if step_index >= first_adapter_step and step_index <= last_adapter_step:
+                    # Only apply this IP-Adapter if the current step is within the IP-Adapter's begin/end step range.
+                    ip_adapter_unet_patcher.set_scale(i, weight)
+                else:
+                    # Otherwise, set the IP-Adapter's scale to 0, so it has no effect.
+                    ip_adapter_unet_patcher.set_scale(i, 0.0)
 
         # Handle ControlNet(s) and T2I-Adapter(s)
         down_block_additional_residuals = None

@@ -8,6 +8,7 @@ import { addLoRAsToGraph } from './addLoRAsToGraph';
 import { addNSFWCheckerToGraph } from './addNSFWCheckerToGraph';
 import { addSaveImageNode } from './addSaveImageNode';
 import { addSeamlessToLinearGraph } from './addSeamlessToLinearGraph';
+import { addT2IAdaptersToLinearGraph } from './addT2IAdapterToLinearGraph';
 import { addVAEToGraph } from './addVAEToGraph';
 import { addWatermarkerToGraph } from './addWatermarkerToGraph';
 import {
@@ -19,12 +20,12 @@ import {
   IMG2IMG_RESIZE,
   LATENTS_TO_IMAGE,
   MAIN_MODEL_LOADER,
-  METADATA_ACCUMULATOR,
   NEGATIVE_CONDITIONING,
   NOISE,
   POSITIVE_CONDITIONING,
   SEAMLESS,
 } from './constants';
+import { addCoreMetadataNode } from './metadata';
 
 /**
  * Builds the Canvas tab's Image to Image graph.
@@ -307,10 +308,7 @@ export const buildCanvasImageToImageGraph = (
     });
   }
 
-  // add metadata accumulator, which is only mostly populated - some fields are added later
-  graph.nodes[METADATA_ACCUMULATOR] = {
-    id: METADATA_ACCUMULATOR,
-    type: 'metadata_accumulator',
+  addCoreMetadataNode(graph, {
     generation_mode: 'img2img',
     cfg_scale,
     width: !isUsingScaledDimensions ? width : scaledBoundingBoxDimensions.width,
@@ -324,14 +322,10 @@ export const buildCanvasImageToImageGraph = (
     steps,
     rand_device: use_cpu ? 'cpu' : 'cuda',
     scheduler,
-    vae: undefined, // option; set in addVAEToGraph
-    controlnets: [], // populated in addControlNetToLinearGraph
-    loras: [], // populated in addLoRAsToGraph
-    ipAdapters: [], // populated in addIPAdapterToLinearGraph
     clip_skip: clipSkip,
     strength,
     init_image: initialImage.image_name,
-  };
+  });
 
   // Add Seamless To Graph
   if (seamlessXAxis || seamlessYAxis) {
@@ -350,6 +344,7 @@ export const buildCanvasImageToImageGraph = (
 
   // Add IP Adapter
   addIPAdapterToLinearGraph(state, graph, DENOISE_LATENTS);
+  addT2IAdaptersToLinearGraph(state, graph, DENOISE_LATENTS);
 
   // NSFW & watermark - must be last thing added to graph
   if (state.system.shouldUseNSFWChecker) {

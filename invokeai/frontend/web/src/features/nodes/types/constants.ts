@@ -32,6 +32,9 @@ export const COLLECTION_TYPES: FieldType[] = [
   'ControlCollection',
   'ColorCollection',
   'T2IAdapterCollection',
+  'IPAdapterCollection',
+  'MetadataItemCollection',
+  'MetadataCollection',
 ];
 
 export const POLYMORPHIC_TYPES: FieldType[] = [
@@ -45,6 +48,8 @@ export const POLYMORPHIC_TYPES: FieldType[] = [
   'ControlPolymorphic',
   'ColorPolymorphic',
   'T2IAdapterPolymorphic',
+  'IPAdapterPolymorphic',
+  'MetadataItemPolymorphic',
 ];
 
 export const MODEL_TYPES: FieldType[] = [
@@ -60,6 +65,7 @@ export const MODEL_TYPES: FieldType[] = [
   'VaeField',
   'ClipField',
   'T2IAdapterModelField',
+  'IPAdapterModelField',
 ];
 
 export const COLLECTION_MAP: FieldTypeMapWithNumber = {
@@ -74,6 +80,9 @@ export const COLLECTION_MAP: FieldTypeMapWithNumber = {
   ControlField: 'ControlCollection',
   ColorField: 'ColorCollection',
   T2IAdapterField: 'T2IAdapterCollection',
+  IPAdapterField: 'IPAdapterCollection',
+  MetadataItemField: 'MetadataItemCollection',
+  MetadataField: 'MetadataCollection',
 };
 export const isCollectionItemType = (
   itemType: string | undefined
@@ -92,6 +101,8 @@ export const SINGLE_TO_POLYMORPHIC_MAP: FieldTypeMapWithNumber = {
   ControlField: 'ControlPolymorphic',
   ColorField: 'ColorPolymorphic',
   T2IAdapterField: 'T2IAdapterPolymorphic',
+  IPAdapterField: 'IPAdapterPolymorphic',
+  MetadataItemField: 'MetadataItemPolymorphic',
 };
 
 export const POLYMORPHIC_TO_SINGLE_MAP: FieldTypeMap = {
@@ -105,6 +116,8 @@ export const POLYMORPHIC_TO_SINGLE_MAP: FieldTypeMap = {
   ControlPolymorphic: 'ControlField',
   ColorPolymorphic: 'ColorField',
   T2IAdapterPolymorphic: 'T2IAdapterField',
+  IPAdapterPolymorphic: 'IPAdapterField',
+  MetadataItemPolymorphic: 'MetadataItemField',
 };
 
 export const TYPES_WITH_INPUT_COMPONENTS: FieldType[] = [
@@ -138,6 +151,37 @@ export const isPolymorphicItemType = (
   Boolean(itemType && itemType in SINGLE_TO_POLYMORPHIC_MAP);
 
 export const FIELDS: Record<FieldType, FieldUIConfig> = {
+  Any: {
+    color: 'gray.500',
+    description: 'Any field type is accepted.',
+    title: 'Any',
+  },
+  MetadataField: {
+    color: 'gray.500',
+    description: 'A metadata dict.',
+    title: 'Metadata Dict',
+  },
+  MetadataCollection: {
+    color: 'gray.500',
+    description: 'A collection of metadata dicts.',
+    title: 'Metadata Dict Collection',
+  },
+  MetadataItemField: {
+    color: 'gray.500',
+    description: 'A metadata item.',
+    title: 'Metadata Item',
+  },
+  MetadataItemCollection: {
+    color: 'gray.500',
+    description: 'Any field type is accepted.',
+    title: 'Metadata Item Collection',
+  },
+  MetadataItemPolymorphic: {
+    color: 'gray.500',
+    description:
+      'MetadataItem or MetadataItemCollection field types are accepted.',
+    title: 'Metadata Item Polymorphic',
+  },
   boolean: {
     color: 'green.500',
     description: t('nodes.booleanDescription'),
@@ -278,15 +322,25 @@ export const FIELDS: Record<FieldType, FieldUIConfig> = {
     description: t('nodes.integerPolymorphicDescription'),
     title: t('nodes.integerPolymorphic'),
   },
+  IPAdapterCollection: {
+    color: 'teal.500',
+    description: t('nodes.ipAdapterCollectionDescription'),
+    title: t('nodes.ipAdapterCollection'),
+  },
   IPAdapterField: {
     color: 'teal.500',
-    description: 'IP-Adapter info passed between nodes.',
-    title: 'IP-Adapter',
+    description: t('nodes.ipAdapterDescription'),
+    title: t('nodes.ipAdapter'),
   },
   IPAdapterModelField: {
     color: 'teal.500',
-    description: 'IP-Adapter model',
-    title: 'IP-Adapter Model',
+    description: t('nodes.ipAdapterModelDescription'),
+    title: t('nodes.ipAdapterModel'),
+  },
+  IPAdapterPolymorphic: {
+    color: 'teal.500',
+    description: t('nodes.ipAdapterPolymorphicDescription'),
+    title: t('nodes.ipAdapterPolymorphic'),
   },
   LatentsCollection: {
     color: 'pink.500',

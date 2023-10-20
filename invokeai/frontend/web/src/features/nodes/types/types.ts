@@ -10,7 +10,7 @@ import {
 } from 'features/parameters/types/parameterSchemas';
 import i18n from 'i18next';
 import { has, keyBy } from 'lodash-es';
-import { OpenAPIV3 } from 'openapi-types';
+import { OpenAPIV3_1 } from 'openapi-types';
 import { RgbaColor } from 'react-colorful';
 import { Node } from 'reactflow';
 import { Graph, _InputField, _OutputField } from 'services/api/types';
@@ -55,6 +55,10 @@ export type InvocationTemplate = {
    */
   outputType: string; // TODO: generate a union of output types
   /**
+   * Whether or not this invocation supports workflows
+   */
+  withWorkflow: boolean;
+  /**
    * The invocation's version.
    */
   version?: string;
@@ -72,6 +76,7 @@ export type FieldUIConfig = {
 
 // TODO: Get this from the OpenAPI schema? may be tricky...
 export const zFieldType = z.enum([
+  'Any',
   'BoardField',
   'boolean',
   'BooleanCollection',
@@ -100,13 +105,20 @@ export const zFieldType = z.enum([
   'integer',
   'IntegerCollection',
   'IntegerPolymorphic',
+  'IPAdapterCollection',
   'IPAdapterField',
   'IPAdapterModelField',
+  'IPAdapterPolymorphic',
   'LatentsCollection',
   'LatentsField',
   'LatentsPolymorphic',
   'LoRAModelField',
   'MainModelField',
+  'MetadataField',
+  'MetadataCollection',
+  'MetadataItemField',
+  'MetadataItemCollection',
+  'MetadataItemPolymorphic',
   'ONNXModelField',
   'Scheduler',
   'SDXLMainModelField',
@@ -430,6 +442,24 @@ export type IPAdapterInputFieldValue = z.infer<
   typeof zIPAdapterInputFieldValue
 >;
 
+export const zIPAdapterPolymorphicInputFieldValue = zInputFieldValueBase.extend(
+  {
+    type: z.literal('IPAdapterPolymorphic'),
+    value: z.union([zIPAdapterField, z.array(zIPAdapterField)]).optional(),
+  }
+);
+export type IPAdapterPolymorphicInputFieldValue = z.infer<
+  typeof zT2IAdapterPolymorphicInputFieldValue
+>;
+
+export const zIPAdapterCollectionInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('IPAdapterCollection'),
+  value: z.array(zIPAdapterField).optional(),
+});
+export type IPAdapterCollectionInputFieldValue = z.infer<
+  typeof zIPAdapterCollectionInputFieldValue
+>;
+
 export const zT2IAdapterModel = zModelIdentifier;
 export type T2IAdapterModel = z.infer<typeof zT2IAdapterModel>;
 
@@ -665,6 +695,57 @@ export type CollectionItemInputFieldValue = z.infer<
   typeof zCollectionItemInputFieldValue
 >;
 
+export const zMetadataItemField = z.object({
+  label: z.string(),
+  value: z.any(),
+});
+export type MetadataItemField = z.infer<typeof zMetadataItemField>;
+
+export const zMetadataItemInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('MetadataItemField'),
+  value: zMetadataItemField.optional(),
+});
+export type MetadataItemInputFieldValue = z.infer<
+  typeof zMetadataItemInputFieldValue
+>;
+
+export const zMetadataItemCollectionInputFieldValue =
+  zInputFieldValueBase.extend({
+    type: z.literal('MetadataItemCollection'),
+    value: z.array(zMetadataItemField).optional(),
+  });
+export type MetadataItemCollectionInputFieldValue = z.infer<
+  typeof zMetadataItemCollectionInputFieldValue
+>;
+
+export const zMetadataItemPolymorphicInputFieldValue =
+  zInputFieldValueBase.extend({
+    type: z.literal('MetadataItemPolymorphic'),
+    value: z
+      .union([zMetadataItemField, z.array(zMetadataItemField)])
+      .optional(),
+  });
+export type MetadataItemPolymorphicInputFieldValue = z.infer<
+  typeof zMetadataItemPolymorphicInputFieldValue
+>;
+
+export const zMetadataField = z.record(z.any());
+export type MetadataField = z.infer<typeof zMetadataField>;
+
+export const zMetadataInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('MetadataField'),
+  value: zMetadataField.optional(),
+});
+export type MetadataInputFieldValue = z.infer<typeof zMetadataInputFieldValue>;
+
+export const zMetadataCollectionInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('MetadataCollection'),
+  value: z.array(zMetadataField).optional(),
+});
+export type MetadataCollectionInputFieldValue = z.infer<
+  typeof zMetadataCollectionInputFieldValue
+>;
+
 export const zColorField = z.object({
   r: z.number().int().min(0).max(255),
   g: z.number().int().min(0).max(255),
@@ -703,7 +784,13 @@ export type SchedulerInputFieldValue = z.infer<
   typeof zSchedulerInputFieldValue
 >;
 
+export const zAnyInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('Any'),
+  value: z.any().optional(),
+});
+
 export const zInputFieldValue = z.discriminatedUnion('type', [
+  zAnyInputFieldValue,
   zBoardInputFieldValue,
   zBooleanCollectionInputFieldValue,
   zBooleanInputFieldValue,
@@ -734,6 +821,8 @@ export const zInputFieldValue = z.discriminatedUnion('type', [
   zIntegerInputFieldValue,
   zIPAdapterInputFieldValue,
   zIPAdapterModelInputFieldValue,
+  zIPAdapterCollectionInputFieldValue,
+  zIPAdapterPolymorphicInputFieldValue,
   zLatentsInputFieldValue,
   zLatentsCollectionInputFieldValue,
   zLatentsPolymorphicInputFieldValue,
@@ -752,6 +841,11 @@ export const zInputFieldValue = z.discriminatedUnion('type', [
   zUNetInputFieldValue,
   zVaeInputFieldValue,
   zVaeModelInputFieldValue,
+  zMetadataItemInputFieldValue,
+  zMetadataItemCollectionInputFieldValue,
+  zMetadataItemPolymorphicInputFieldValue,
+  zMetadataInputFieldValue,
+  zMetadataCollectionInputFieldValue,
 ]);
 
 export type InputFieldValue = z.infer<typeof zInputFieldValue>;
@@ -764,14 +858,19 @@ export type InputFieldTemplateBase = {
   fieldKind: 'input';
 } & _InputField;
 
+export type AnyInputFieldTemplate = InputFieldTemplateBase & {
+  type: 'Any';
+  default: undefined;
+};
+
 export type IntegerInputFieldTemplate = InputFieldTemplateBase & {
   type: 'integer';
   default: number;
   multipleOf?: number;
   maximum?: number;
-  exclusiveMaximum?: boolean;
+  exclusiveMaximum?: number;
   minimum?: number;
-  exclusiveMinimum?: boolean;
+  exclusiveMinimum?: number;
 };
 
 export type IntegerCollectionInputFieldTemplate = InputFieldTemplateBase & {
@@ -792,9 +891,9 @@ export type FloatInputFieldTemplate = InputFieldTemplateBase & {
   default: number;
   multipleOf?: number;
   maximum?: number;
-  exclusiveMaximum?: boolean;
+  exclusiveMaximum?: number;
   minimum?: number;
-  exclusiveMinimum?: boolean;
+  exclusiveMinimum?: number;
 };
 
 export type FloatCollectionInputFieldTemplate = InputFieldTemplateBase & {
@@ -917,6 +1016,11 @@ export type UNetInputFieldTemplate = InputFieldTemplateBase & {
   type: 'UNetField';
 };
 
+export type MetadataItemFieldTemplate = InputFieldTemplateBase & {
+  default: undefined;
+  type: 'MetadataItemField';
+};
+
 export type ClipInputFieldTemplate = InputFieldTemplateBase & {
   default: undefined;
   type: 'ClipField';
@@ -948,6 +1052,19 @@ export type ControlPolymorphicInputFieldTemplate = Omit<
 export type IPAdapterInputFieldTemplate = InputFieldTemplateBase & {
   default: undefined;
   type: 'IPAdapterField';
+};
+
+export type IPAdapterCollectionInputFieldTemplate = InputFieldTemplateBase & {
+  default: undefined;
+  type: 'IPAdapterCollection';
+  item_default?: IPAdapterField;
+};
+
+export type IPAdapterPolymorphicInputFieldTemplate = Omit<
+  IPAdapterInputFieldTemplate,
+  'type'
+> & {
+  type: 'IPAdapterPolymorphic';
 };
 
 export type T2IAdapterInputFieldTemplate = InputFieldTemplateBase & {
@@ -1052,6 +1169,34 @@ export type WorkflowInputFieldTemplate = InputFieldTemplateBase & {
   type: 'WorkflowField';
 };
 
+export type MetadataItemInputFieldTemplate = InputFieldTemplateBase & {
+  default: undefined;
+  type: 'MetadataItemField';
+};
+
+export type MetadataItemCollectionInputFieldTemplate =
+  InputFieldTemplateBase & {
+    default: undefined;
+    type: 'MetadataItemCollection';
+  };
+
+export type MetadataItemPolymorphicInputFieldTemplate = Omit<
+  MetadataItemInputFieldTemplate,
+  'type'
+> & {
+  type: 'MetadataItemPolymorphic';
+};
+
+export type MetadataInputFieldTemplate = InputFieldTemplateBase & {
+  default: undefined;
+  type: 'MetadataField';
+};
+
+export type MetadataCollectionInputFieldTemplate = InputFieldTemplateBase & {
+  default: undefined;
+  type: 'MetadataCollection';
+};
+
 /**
  * An input field template is generated on each page load from the OpenAPI schema.
  *
@@ -1059,6 +1204,7 @@ export type WorkflowInputFieldTemplate = InputFieldTemplateBase & {
  * maximum length, pattern to match, etc).
  */
 export type InputFieldTemplate =
+  | AnyInputFieldTemplate
   | BoardInputFieldTemplate
   | BooleanCollectionInputFieldTemplate
   | BooleanPolymorphicInputFieldTemplate
@@ -1088,7 +1234,9 @@ export type InputFieldTemplate =
   | IntegerPolymorphicInputFieldTemplate
   | IntegerInputFieldTemplate
   | IPAdapterInputFieldTemplate
+  | IPAdapterCollectionInputFieldTemplate
   | IPAdapterModelInputFieldTemplate
+  | IPAdapterPolymorphicInputFieldTemplate
   | LatentsInputFieldTemplate
   | LatentsCollectionInputFieldTemplate
   | LatentsPolymorphicInputFieldTemplate
@@ -1106,7 +1254,12 @@ export type InputFieldTemplate =
   | T2IAdapterPolymorphicInputFieldTemplate
   | UNetInputFieldTemplate
   | VaeInputFieldTemplate
-  | VaeModelInputFieldTemplate;
+  | VaeModelInputFieldTemplate
+  | MetadataItemInputFieldTemplate
+  | MetadataItemCollectionInputFieldTemplate
+  | MetadataInputFieldTemplate
+  | MetadataItemPolymorphicInputFieldTemplate
+  | MetadataCollectionInputFieldTemplate;
 
 export const isInputFieldValue = (
   field?: InputFieldValue | OutputFieldValue
@@ -1126,20 +1279,20 @@ export type TypeHints = {
 };
 
 export type InvocationSchemaExtra = {
-  output: OpenAPIV3.ReferenceObject; // the output of the invocation
+  output: OpenAPIV3_1.ReferenceObject; // the output of the invocation
   title: string;
   category?: string;
   tags?: string[];
   version?: string;
   properties: Omit<
-    NonNullable<OpenAPIV3.SchemaObject['properties']> &
+    NonNullable<OpenAPIV3_1.SchemaObject['properties']> &
       (_InputField | _OutputField),
     'type'
   > & {
-    type: Omit<OpenAPIV3.SchemaObject, 'default'> & {
+    type: Omit<OpenAPIV3_1.SchemaObject, 'default'> & {
       default: AnyInvocationType;
     };
-    use_cache: Omit<OpenAPIV3.SchemaObject, 'default'> & {
+    use_cache: Omit<OpenAPIV3_1.SchemaObject, 'default'> & {
       default: boolean;
     };
   };
@@ -1150,17 +1303,17 @@ export type InvocationSchemaType = {
 };
 
 export type InvocationBaseSchemaObject = Omit<
-  OpenAPIV3.BaseSchemaObject,
+  OpenAPIV3_1.BaseSchemaObject,
   'title' | 'type' | 'properties'
 > &
   InvocationSchemaExtra;
 
 export type InvocationOutputSchemaObject = Omit<
-  OpenAPIV3.SchemaObject,
+  OpenAPIV3_1.SchemaObject,
   'properties'
 > & {
-  properties: OpenAPIV3.SchemaObject['properties'] & {
-    type: Omit<OpenAPIV3.SchemaObject, 'default'> & {
+  properties: OpenAPIV3_1.SchemaObject['properties'] & {
+    type: Omit<OpenAPIV3_1.SchemaObject, 'default'> & {
       default: string;
     };
   } & {
@@ -1168,14 +1321,18 @@ export type InvocationOutputSchemaObject = Omit<
   };
 };
 
-export type InvocationFieldSchema = OpenAPIV3.SchemaObject & _InputField;
+export type InvocationFieldSchema = OpenAPIV3_1.SchemaObject & _InputField;
+
+export type OpenAPIV3_1SchemaOrRef =
+  | OpenAPIV3_1.ReferenceObject
+  | OpenAPIV3_1.SchemaObject;
 
 export interface ArraySchemaObject extends InvocationBaseSchemaObject {
-  type: OpenAPIV3.ArraySchemaObjectType;
-  items: OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject;
+  type: OpenAPIV3_1.ArraySchemaObjectType;
+  items: OpenAPIV3_1.ReferenceObject | OpenAPIV3_1.SchemaObject;
 }
 export interface NonArraySchemaObject extends InvocationBaseSchemaObject {
-  type?: OpenAPIV3.NonArraySchemaObjectType;
+  type?: OpenAPIV3_1.NonArraySchemaObjectType;
 }
 
 export type InvocationSchemaObject = (
@@ -1184,46 +1341,46 @@ export type InvocationSchemaObject = (
 ) & { class: 'invocation' };
 
 export const isSchemaObject = (
-  obj: OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject | undefined
-): obj is OpenAPIV3.SchemaObject => Boolean(obj && !('$ref' in obj));
+  obj: OpenAPIV3_1.ReferenceObject | OpenAPIV3_1.SchemaObject | undefined
+): obj is OpenAPIV3_1.SchemaObject => Boolean(obj && !('$ref' in obj));
 
 export const isArraySchemaObject = (
-  obj: OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject | undefined
-): obj is OpenAPIV3.ArraySchemaObject =>
+  obj: OpenAPIV3_1.ReferenceObject | OpenAPIV3_1.SchemaObject | undefined
+): obj is OpenAPIV3_1.ArraySchemaObject =>
   Boolean(obj && !('$ref' in obj) && obj.type === 'array');
 
 export const isNonArraySchemaObject = (
-  obj: OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject | undefined
-): obj is OpenAPIV3.NonArraySchemaObject =>
+  obj: OpenAPIV3_1.ReferenceObject | OpenAPIV3_1.SchemaObject | undefined
+): obj is OpenAPIV3_1.NonArraySchemaObject =>
   Boolean(obj && !('$ref' in obj) && obj.type !== 'array');
 
 export const isRefObject = (
-  obj: OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject | undefined
-): obj is OpenAPIV3.ReferenceObject => Boolean(obj && '$ref' in obj);
+  obj: OpenAPIV3_1.ReferenceObject | OpenAPIV3_1.SchemaObject | undefined
+): obj is OpenAPIV3_1.ReferenceObject => Boolean(obj && '$ref' in obj);
 
 export const isInvocationSchemaObject = (
   obj:
-    | OpenAPIV3.ReferenceObject
-    | OpenAPIV3.SchemaObject
+    | OpenAPIV3_1.ReferenceObject
+    | OpenAPIV3_1.SchemaObject
     | InvocationSchemaObject
 ): obj is InvocationSchemaObject =>
   'class' in obj && obj.class === 'invocation';
 
 export const isInvocationOutputSchemaObject = (
   obj:
-    | OpenAPIV3.ReferenceObject
-    | OpenAPIV3.SchemaObject
+    | OpenAPIV3_1.ReferenceObject
+    | OpenAPIV3_1.SchemaObject
     | InvocationOutputSchemaObject
 ): obj is InvocationOutputSchemaObject =>
   'class' in obj && obj.class === 'output';
 
 export const isInvocationFieldSchema = (
-  obj: OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject
+  obj: OpenAPIV3_1.ReferenceObject | OpenAPIV3_1.SchemaObject
 ): obj is InvocationFieldSchema => !('$ref' in obj);
 
 export type InvocationEdgeExtra = { type: 'default' | 'collapsed' };
 
-const zLoRAMetadataItem = z.object({
+export const zLoRAMetadataItem = z.object({
   lora: zLoRAModelField.deepPartial(),
   weight: z.number(),
 });
@@ -1237,6 +1394,10 @@ export type ControlNetMetadataItem = z.infer<typeof zControlNetMetadataItem>;
 const zIPAdapterMetadataItem = zIPAdapterField.deepPartial();
 
 export type IPAdapterMetadataItem = z.infer<typeof zIPAdapterMetadataItem>;
+
+const zT2IAdapterMetadataItem = zT2IAdapterField.deepPartial();
+
+export type T2IAdapterMetadataItem = z.infer<typeof zT2IAdapterMetadataItem>;
 
 export const zCoreMetadata = z
   .object({
@@ -1259,6 +1420,7 @@ export const zCoreMetadata = z
       .catch(null),
     controlnets: z.array(zControlNetMetadataItem).nullish().catch(null),
     ipAdapters: z.array(zIPAdapterMetadataItem).nullish().catch(null),
+    t2iAdapters: z.array(zT2IAdapterMetadataItem).nullish().catch(null),
     loras: z.array(zLoRAMetadataItem).nullish().catch(null),
     vae: zVaeModelField.nullish().catch(null),
     strength: z.number().nullish().catch(null),
